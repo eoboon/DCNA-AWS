@@ -1,0 +1,274 @@
+C:\tmp 
+kafka-logs, zookeeper 폴더 삭제
+
+C:\kafka_2.13-2.5.0\bin\windows 경로가서
+CMD 2개 창 띄워서 주키퍼 카프카 실행
+zookeeper-server-start.bat ../../config/zookeeper.properties
+kafka-server-start.bat ../../config/server.properties
+
+CMD창 가서 이벤트 로그 보기 
+kafka-console-consumer.bat --bootstrap-server http://localhost:9092 --topic PEJ --from-beginning
+
+인텔리J 에서 각 서비스 spring-boot:run
+
+CMD 새 창 띄워서
+
+발주처리
+http POST localhost:8088/orders orderId="1" prdId="111" prdQty=100 prdPrice=1000 prdNm="과자"
+생성확인
+http localhost:8088/orders
+http localhost:8088/deliveries
+http localhost:8088/products
+마이페이지확인
+http localhost:8088/orderViews (수정사항 : deliveryStatus NULL, deliveryId 삭제필요)
+http localhost:8088/salesViews
+발주삭제처리
+http PATCH localhost:8088/orders/1 orderStatus="CANCELLED"
+삭제확인
+http a8316a2fd13f14758bb742839095cb6a-1560133616.us-east-2.elb.amazonaws.com:8080/orders
+http a8316a2fd13f14758bb742839095cb6a-1560133616.us-east-2.elb.amazonaws.com:8080/deliveries
+마이페이지확인
+http a8316a2fd13f14758bb742839095cb6a-1560133616.us-east-2.elb.amazonaws.com:8080/orderViews (수정사항 : deliveryStatus NULL 해결하면 될듯)
+구매
+http POST localhost:8088/purchases purchaseId="11" purchaseStatus="구매" prdId="111" purchaseQty=3 purchaseAmt="3000" prdNm="껌" prdPrice="1000" custNm="구매자"
+구매확인
+http localhost:8088/purchases
+http localhost:8088/products
+마이페이지확인
+http localhost:8088/salesViews (수정사항 : prdNm, prdPrice 세팅)
+구매취소
+http DELETE localhost:8088/purchases/1
+구매취소확인
+http localhost:8088/purchases
+http localhost:8088/products
+마이페이지확인
+http localhost:8088/salesViews (수정사항 : prdNm, prdPrice 세팅)
+
+깃허브 repository 생성 (서비스별로 생성)
+https://github.com/
+HTTP URL 복사해서 보관
+https://github.com/niceduck76/aws-order.git
+CMD 창
+해당 폴더 가서 D:\강우영\PEJ\Purchase
+git config --local credential.helper ""
+git init
+git config --global user.name "zzihi"
+git config --global user.email "chorocta@naver.com"
+git remote add origin https://github.com/zzihi/PEJ_DELIVERY.git
+git remote add origin https://github.com/zzihi/PEJ_MYPAGE.git
+git remote add origin https://github.com/zzihi/PEJ_ORDER.git
+git remote -v
+git status
+git add .
+git commit -m “6 commit”
+git push -u origin master
+
+Ubuntu 띄우고
+폴더 생성
+mkdir PEJ_mypage
+cd PEJ_mypage
+git clone https://github.com/zzihi/PEJ_ORDER.git
+cd PEJ_ORDER
+rm -rf ./target
+mvn package
+
+도커 이미지 삭제 (기존)
+docker image rm $(docker images -q) # 한번에 모든 도커 이미지 지우기
+docker images
+ECR - micro service 마다 repository 생성(repository명이 이미지명)
+docker build -t 496278789073.dkr.ecr.us-east-2.amazonaws.com/pej_order:v5 .
+docker images
+로그인
+aws configure
+aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin 496278789073.dkr.ecr.us-east-2.amazonaws.com
+docker push 496278789073.dkr.ecr.us-east-2.amazonaws.com/pej_order:v5
+aws에서 이미지 확인
+
+컨테이너 만들기
+eksctl create cluster --name skteam1-sk-Cluster --version 1.15 --nodegroup-name standard-workers --node-type t3.medium --nodes 2 --nodes-min 1 --nodes-max 3
+aws eks --region us-east-2 update-kubeconfig --name skteam1-sk-Cluster
+확인
+kubectl config current-context
+kubectl get all
+디플로이 명 게이트웨이 xml 과 명 똑같아야 함.
+kubectl create deploy delivery --image=496278789073.dkr.ecr.us-east-2.amazonaws.com/pej_delivery:v3
+kubectl create deploy gateway --image=496278789073.dkr.ecr.us-east-2.amazonaws.com/pej_gateway:v2
+kubectl create deploy mypage --image=496278789073.dkr.ecr.us-east-2.amazonaws.com/pej_mypage:v3
+kubectl create deploy order --image=496278789073.dkr.ecr.us-east-2.amazonaws.com/pej_order:v5
+kubectl create deploy product --image=496278789073.dkr.ecr.us-east-2.amazonaws.com/pej_propduct:v1
+kubectl create deploy purchase --image=496278789073.dkr.ecr.us-east-2.amazonaws.com/pej_purchase:v1
+
+kubectl get all
+kubectl expose deploy delivery  --type=ClusterIP --port=8080
+kubectl expose deploy gateway  --type=LoadBalancer --port=8080
+kubectl expose deploy mypage  --type=ClusterIP --port=8080
+kubectl expose deploy order  --type=ClusterIP --port=8080
+kubectl expose deploy product  --type=ClusterIP --port=8080
+kubectl expose deploy purchase  --type=ClusterIP --port=8080
+
+--디플로이
+kubectl get deploy order -o yaml (설정한 내역이 반영되지 않았어요)
+vi deployment.yml
+deployment.yml (위치에 가서 수정 후 다시 적용)
+kubectl apply -f deployment.yml
+
+kubectl set image deploy order pej-order-msl8t=496278789073.dkr.ecr.us-east-2.amazonaws.com/pej_order:v4
+
+삭제 필요 시 삭제 처리
+kubectl delete deploy,service --all
+kubectl scale deploy "delivery" --replicas=0
+
+카프카 설치
+curl https://raw.githubusercontent.com/kubernetes/helm/master/scripts/get | bash
+kubectl --namespace kube-system create sa tiller
+kubectl create clusterrolebinding tiller --clusterrole cluster-admin --serviceaccount=kube-system:tiller
+helm init --service-account tiller
+kubectl patch deploy --namespace kube-system tiller-deploy -p '{"spec":{"template":{"spec":{"serviceAccount":"tiller"}}}}'
+helm repo add incubator http://storage.googleapis.com/kubernetes-charts-incubator
+helm repo update
+helm install --name my-kafka --namespace kafka incubator/kafka
+
+kafka 설치 후 모니터링 - watch kubectl get all -n kafka 
+
+테스트
+POD주소확인(node IP)
+kubectl get po -o wide
+
+
+
+시나리오 정리
+
+[기능적 요구사항]
+--발주
+1. 점장이 상품을 발주 한다.
+2. 본사가 발주된 상품을 배송 한다.
+3. 배송이 완료되면 알바가 상품을 입고처리 한다.
+4. 상품발주시 점장 마이페이지에 주문view, 판매view 추가된다.
+
+--발주취소
+1. 점장이 상품을 발주취소 할수있다.
+2. (시스템이) 발주취소된 상품을 배송취소한다
+3. 상품발주 취소시 점장 마이페이지에 주문view 변경된다.
+
+--구매
+1. 고객이 상품을 구매한다.
+2. 상품구매시 상품의 재고가 변경 된다.
+3. 상품 구매시 점장 마이페이지에 판매view 변경된다.
+
+--구매취소
+1. 고객이 상품구매를 취소한다.
+2. 상품구매 취소시 상품의 재고가 변경 된다.
+3. 상품구매 취소시 점장 마이페이지에 판매view 변경된다.
+
+[비기능적 요구사항]
+1. 트랜잭션
+- 상품발주 취소시 상품배송 자동 취소 처리 Sync 호출
+
+2. 장애격리
+- 매입매출관리 기능이 수행되지 않더라도 구매는 365일 24시간 가능해야 한다 Async (event-driven), Eventual Consistency
+- 구매가 과중되면 재고변경을 잠시동안 받지 않고 재고변경을 잠시후에 하도록 유도한다 Circuit breaker, fallback (확인필요)
+
+3. 성능
+- 점장이 주문,판매 화면으로 매입매출을 조회할수 있어야 한다 CQRS
+- 구매가 발생할때 마다 상품재고가 변경될수 있어야 한다 Event driven
+
+-------------------------------------------------------------------------------------------------------------------------------------
+
+1.[Intelij]서킷브레이크(order)
+feign:
+  hystrix:
+    enabled: true
+
+hystrix:
+  command:
+    # 전역설정
+    default:
+      execution.isolation.thread.timeoutInMilliseconds: 610
+	  
+2.타임아웃 설정(delivery)
+        try {
+            Thread.currentThread().sleep((long) (400 + Math.random() * 220));
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+		
+		
+1.[UBUNTU] seige 설치
+sudo apt-get update -y
+sudo apt-get install -y siege
+
+2.[UBUNTU] 로드 테스트 툴(siege) 배포
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: siege
+spec:
+  containers:
+  - name: siege
+    image: apexacme/siege-nginx
+EOF
+
+3.[UBUNTU] siege POD안에서 실행하는 법
+kubectl exec -it siege -- /bin/bash
+root@siege:/# siege -c10 -t50S -r10 --content-type "application/json" 'http://order:8080/orders/1 PATCH {"orderStatus": "CANCLED"}' -v
+
+4.[UBUNTU] 오토스케일 아웃(https://workflowy.com/s/msa/27a0ioMCzlpV04Ib#?q=php)
+kubectl apply -f https://k8s.io/examples/application/php-apache.yaml
+kubectl autoscale deployment php-apache --cpu-percent=20 --min=1 --max=10
+kubectl get hpa
+: unknown  안나와야 함
+kubectl top nodes
+: 명령이 먹어야 함
+
+- Metric Server 설치
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.3.6/components.yaml
+kubectl get deployment metrics-server -n kube-system
+
+-우리 deploy에 적용하기
+kubectl autoscale deploy delivery --min=1 --max=10 --cpu-percent=15
+- resource limit 설정 : kubernetes/deployment.yaml??
+        resources:
+          limits:
+            cpu: 500m
+          requests:
+            cpu: 200m
+
+
+
+[무정지재배포]
+1.readinessProbe 설정을 넣었다 뺏다 하면서 증명 => 부하가 걸리던 쪽에...
+          readinessProbe:
+            httpGet:
+              path: '/actuator/health'
+              port: 8080
+            initialDelaySeconds: 10
+            timeoutSeconds: 2
+            periodSeconds: 5
+            failureThreshold: 10
+
+
+//
+skccadmin@SKCC16D00070:~$ kubectl get hpa
+NAME         REFERENCE               TARGETS         MINPODS   MAXPODS   REPLICAS   AGE
+delivery     Deployment/delivery     <unknown>/15%   1         10        1          7m52s
+php-apache   Deployment/php-apache   <unknown>/20%   1         10        1          69s
+skccadmin@SKCC16D00070:~$ kubectl top nodes
+Error from server (NotFound): the server could not find the requested resource (get services http:heapster:)
+skccadmin@SKCC16D00070:~$ kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.3.6/components.yaml
+clusterrole.rbac.authorization.k8s.io/system:aggregated-metrics-reader created
+clusterrolebinding.rbac.authorization.k8s.io/metrics-server:system:auth-delegator created
+rolebinding.rbac.authorization.k8s.io/metrics-server-auth-reader created
+apiservice.apiregistration.k8s.io/v1beta1.metrics.k8s.io created
+serviceaccount/metrics-server created
+deployment.apps/metrics-server created
+service/metrics-server created
+clusterrole.rbac.authorization.k8s.io/system:metrics-server created
+clusterrolebinding.rbac.authorization.k8s.io/system:metrics-server created
+skccadmin@SKCC16D00070:~$ kubectl top nodes
+error: metrics not available yet
+skccadmin@SKCC16D00070:~$
+
+
+
+
