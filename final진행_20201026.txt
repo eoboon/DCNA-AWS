@@ -1,0 +1,147 @@
+kubectl top load
+kubectl top pod
+
+https://gknec2019.signin.aws.amazon.com/console
+ID : Skccuser01
+PW : Skcc@1234
+
+ap-northeast-2.console.aws.amazon.com
+
+Ubuntu에서 윈도우 경로 : /mnt/d/hanjm/mtaxi/
+
+
+C:\kafka_2.12-2.5.0\bin\windows
+
+mvn spring-boot:run
+
+1) 호출
+http http://localhost:8082/orders driverId=1 customerName="han" location="seoul" status="Ordered"
+http http://localhost:8081/managements id=1 orderId=1 driverId=1 location="seoul" status="Approved" 
+http http://localhost:8083/drivers id=1 orderId=1 driverId=1 location="seoul" status="Agreed"
+http http://localhost:8084/orderStatuses id=1 orderId=1 driverId=1 customerName="han" location="seoul" status="Agreed"
+
+2)취소
+http http://localhost:8082/orders orderId=1 driverId=1 customerName="han" location="seoul" status="Canceled"
+
+[EKS 클러스터 생성]
+eksctl create cluster --name skcc01-cluster --version 1.15 --nodegroup-name standard-workers --node-type t3.medium --nodes 3 --nodes-min 1 --nodes-max 3
+
+aws eks --region ap-northeast-2 update-kubeconfig --name skcc01-cluster
+
+[레파지토리]
+879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-order
+879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-management
+879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-driver
+879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-orderstatus
+879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-gateway
+
+[도커클라이언트 인증 및 사용]
+1)인증 토큰을 검색하고 레지스트리에 대해 Docker 클라이언트를 인증합니다.
+AWS CLI 사용: 
+aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin 879772956301.dkr.ecr.ap-northeast-2.amazonaws.com
+2)다음 명령을 사용하여 도커 이미지를 빌드합니다. 도커 파일을 처음부터 새로 빌드하는 방법에 대한 자세한 내용은 여기  지침을 참조하십시오. 이미지를 이미 빌드한 경우에는 이 단계를 건너뛸 수 있습니다.
+docker build -t skcc01-driver .
+3)빌드가 완료되면 이미지에 태그를 지정하여 이 리포지토리에 푸시할 수 있습니다.
+docker tag skcc01-driver:latest 879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-driver:latest
+4)다음 명령을 실행하여 이 이미지를 새로 생성한 AWS 리포지토리로 푸시합니다.
+docker push 879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-driver:latest
+
+카프카컨슈머	
+kubectl -n kafka exec -ti my-kafka-0 -- /usr/bin/kafka-console-consumer --bootstrap-server my-kafka:9092 --topic mtaxi --from-beginning
+카프카 토픽 확인	
+kubectl -n kafka exec my-kafka-0 -- /usr/bin/kafka-topics --zookeeper my-kafka-zookeeper:2181 --list
+
+[도커빌드]
+cd ../order
+cd ../management
+cd ../driver
+cd ../orderstatus
+cd ../gateway
+
+rm -rf ./target
+mvn package
+
+--이미지 확인
+docker images
+
+docker build -t 879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-order:v1 .
+docker push 879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-order:v1
+
+docker build -t 879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-management:v2 .
+docker push 879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-management:v2
+
+docker build -t 879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-driver:v1 .
+docker push 879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-driver:v1
+
+docker build -t 879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-orderstatus:v1 .
+docker push 879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-orderstatus:v1
+
+docker build -t 879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-gateway:v1 .
+docker push 879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-gateway:v1
+
+[컨테이너 생성]
+--create
+kubectl create deploy order --image=879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-order:v1
+kubectl create deploy management --image=879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-management:v2
+kubectl create deploy driver --image=879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-driver:v1
+kubectl create deploy orderstatus --image=879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-orderstatus:v1
+kubectl create deploy gateway --image=879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-gateway:v1
+
+--expose
+kubectl expose deploy order --type=ClusterIP --port=8080
+kubectl expose deploy management --type=ClusterIP --port=8080
+kubectl expose deploy driver --type=ClusterIP --port=8080
+kubectl expose deploy orderstatus --type=ClusterIP --port=8080
+kubectl expose deploy gateway --type=LoadBalancer --port=8080
+
+--deploy
+kubectl get deploy order -o yaml    --설정내용확인
+
+[yaml파일 수정]
+kubectl apply -f a-config.yaml
+
+-이미지에 적용은 어떻게?
+kubectl set image deploy management 
+
+
+-http://a940379bcbf1d431b9ac45f087864e4f-354314788.ap-northeast-2.elb.amazonaws.com:8080/orders
+
+http http://order:8080/orders driverId=1 customerName="han" location="seoul" status="Ordered"
+
+[istion 컨테이너 생성]
+kubectl create deploy driver --image=879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-driver:v1 -n istio-cb-ns
+
+kubectl describe pod/driver-6c8474f89c-rj5ch -n istio-cb-ns
+
+kubectl create deploy order --image=879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-order:v1 -n istio-cb-ns
+kubectl create deploy management --image=879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-management:v2 -n istio-cb-ns
+kubectl create deploy orderstatus --image=879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-orderstatus:v1 -n istio-cb-ns
+kubectl create deploy gateway --image=879772956301.dkr.ecr.ap-northeast-2.amazonaws.com/skcc01-gateway:v1 -n istio-cb-ns
+
+kubectl expose deploy order --port=8080 -n istio-cb-ns
+kubectl expose deploy management --port=8080 -n istio-cb-ns
+kubectl expose deploy driver --port=8080 -n istio-cb-ns
+kubectl expose deploy orderstatus --port=8080 -n istio-cb-ns
+kubectl expose deploy gateway --port=8080 -n istio-cb-ns
+
+[HPA]
+1. CPU 사용량 체크를 위한 Metric Server 설치
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.3.6/components.yaml
+kubectl get deployment metrics-server -n kube-system
+
+2. istio injection 적용 해제
+kubectl label namespace istio-cb-ns istio-injection=disabled --overwrite
+
+3. replica 를 동적으로 늘려주도록 HPA 를 설정한다. 설정은 CPU 사용량이 10프로를 넘어서면 replica 를 10개까지 늘려준다:
+kubectl autoscale deploy driver -n istio-cb-ns --min=1 --max=10 --cpu-percent=20
+
+4. 적용내용 확인
+kubectl get all -n istio-cb-ns
+
+5. siege로 워크로드 2분동안 수행
+siege -c100 -t120 -v http://driver:8080
+
+6. 오토스케일이 어떻게 되고 있는지 모니터링을 걸어둔다.
+kubectl get deploy driver -w 
+
+
